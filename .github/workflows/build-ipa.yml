@@ -1,4 +1,4 @@
-name: 便當計數_自動打包IPA
+name: 便當計數_套件自動打包
 on:
   push:
     branches: [ main ]
@@ -6,78 +6,79 @@ on:
 
 jobs:
   build:
-    name: 編譯產生IPA
+    name: 自動解析套件並打包
     runs-on: macos-15
     timeout-minutes: 20
 
     steps:
-    - name: 下載倉庫檔案
+    - name: 下載檔案
       uses: actions/checkout@v4
 
-    - name: 解壓縮並整理專案
+    - name: 自動處理套件/壓縮檔
       run: |
         ls -la
-        # 自動解壓所有 ZIP 檔
+        # 解壓所有 ZIP
         for zip in *.zip; do
           [ -f "$zip" ] || continue
-          echo "📦 找到壓縮檔：$zip，開始解壓..."
-          unzip -q "$zip"
+          unzip -q -o "$zip"
           rm "$zip"
         done
 
-        # 列出所有內容，方便除錯
-        echo "📂 目前所有檔案："
-        ls -la
-
-        # 比對各種可能名稱
-        if [ -d "便當計數.swiftpm" ]; then
-          mv 便當計數.swiftpm 便當計數.xcodeproj
-          echo "✅ 專案轉換完成"
-        elif [ -d "便當計數" ] && [ -f "便當計數/Package.swift" ]; then
-          mv 便當計數 便當計數.xcodeproj
-          echo "✅ 從資料夾轉換完成"
+        # 辨識 swiftpm 套件
+        if [ -f "便當計數.swiftpm/Package.swift" ]; then
+          echo "✅ 找到 Swift Playgrounds 套件"
+          mkdir -p Sources/便當計數
+          cp -R 便當計數.swiftpm/Sources/* Sources/便當計數/ 2>/dev/null || true
+          cp 便當計數.swiftpm/Package.swift ./ 2>/dev/null || true
+        elif [ -d "便當計數.swiftpm" ]; then
+          echo "✅ 找到套件資料夾"
+          mkdir -p Sources/便當計數
+          cp -R 便當計數.swiftpm/Sources/* Sources/便當計數/ 2>/dev/null || true
+          cp 便當計數.swiftpm/Package.swift ./ 2>/dev/null || true
         else
-          echo "❌ 找不到專案！請確認上傳的是「便當計數.swiftpm」或其壓縮檔"
-          exit 1
+          echo "⚠️ 未找到標準套件，嘗試尋找 Swift 檔案"
+          find . -name "*.swift" -type f | head -20
         fi
 
-    - name: 安裝編譯工具
-      run: brew install xcbeautify
+        echo "📂 整理後結構："
+        ls -la
+        ls -la Sources/ 2>/dev/null || true
 
-    - name: 編譯原生App
+    - name: 安裝工具
+      run: brew install xcbeautify swiftlint
+
+    - name: 自動生成 Xcode 專案
       run: |
-        xcodebuild archive \
-          -project 便當計數.xcodeproj \
-          -scheme 便當計數 \
-          -configuration Release \
-          -archivePath App.xcarchive \
-          -sdk iphoneos \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          | xcbeautify
+        cat > project.yml << 'YML'
+name: 便當計數
+options:
+  bundleIdPrefix: com.yourname
+  deploymentTarget:
+    iOS: "17.0"
+  platform: iOS
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  便當計數:
+    type: application
+    platform: iOS
+    sources: ["Sources/便當計數"]
+YML
+        swift package generate-xcodeproj || echo "改用 XcodeGen"
+        mint install yonaskolb/XcodeGen latest
+        xcodegen generate
 
-    - name: 匯出安裝檔IPA
+    - name: 編譯與匯出 IPA
       run: |
-        xcodebuild -exportArchive \
-          -archivePath App.xcarchive \
-          -exportOptionsPlist <(echo '<?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <false/>
-          </dict>
-          </plist>') \
-          -exportPath ./Output
+        xcodebuild archive -project 便當計數.xcodeproj -scheme 便當計數 -configuration Release -archivePath App.xcarchive -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        xcodebuild -exportArchive -archivePath App.xcarchive -exportOptionsPlist <(echo '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>method</key><string>ad-hoc</string><key>signingStyle</key><string>manual</string></dict></plist>') -exportPath ./Output
 
-    - name: 上傳成品IPA
+    - name: 上傳 IPA
       uses: actions/upload-artifact@v4
       with:
         name: 便當計數_安裝檔
