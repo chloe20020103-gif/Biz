@@ -1,4 +1,4 @@
-name: 便當計數_自動打包
+name: 便當計數_打包IPA
 on:
   push:
     branches: [ main ]
@@ -12,10 +12,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: 建立專案設定
+    - name: 生成專案設定
       run: |
         cat > project.yml << 'YML'
-name: 便當計數
+name: BentoCounter
 options:
   bundleIdPrefix: com.chloe
   deploymentTarget:
@@ -28,7 +28,7 @@ settings:
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_REQUIRED: NO
 targets:
-  便當計數:
+  BentoCounter:
     type: application
     platform: iOS
     sources:
@@ -36,7 +36,7 @@ targets:
       - 便當計數App.swift
 YML
 
-    - name: 安裝工具並生成專案
+    - name: 安裝工具與生成專案
       run: |
         brew install xcbeautify xcodegen
         xcodegen generate
@@ -44,8 +44,8 @@ YML
     - name: 編譯與匯出IPA
       run: |
         xcodebuild archive \
-          -project 便當計數.xcodeproj \
-          -scheme 便當計數 \
+          -project BentoCounter.xcodeproj \
+          -scheme BentoCounter \
           -configuration Release \
           -archivePath App.xcarchive \
           -sdk iphoneos \
