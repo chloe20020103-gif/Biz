@@ -8,21 +8,36 @@ jobs:
   build:
     name: 編譯產生IPA
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
-    - name: 下載程式碼
+    - name: 下載倉庫檔案
       uses: actions/checkout@v4
 
-    - name: 確認與整理專案
+    - name: 解壓縮並整理專案
       run: |
         ls -la
-        # 將 Swift Playgrounds 匯出的專案轉為標準 Xcode 格式
+        # 自動解壓所有 ZIP 檔
+        for zip in *.zip; do
+          [ -f "$zip" ] || continue
+          echo "📦 找到壓縮檔：$zip，開始解壓..."
+          unzip -q "$zip"
+          rm "$zip"
+        done
+
+        # 列出所有內容，方便除錯
+        echo "📂 目前所有檔案："
+        ls -la
+
+        # 比對各種可能名稱
         if [ -d "便當計數.swiftpm" ]; then
           mv 便當計數.swiftpm 便當計數.xcodeproj
           echo "✅ 專案轉換完成"
+        elif [ -d "便當計數" ] && [ -f "便當計數/Package.swift" ]; then
+          mv 便當計數 便當計數.xcodeproj
+          echo "✅ 從資料夾轉換完成"
         else
-          echo "❌ 找不到「便當計數.swiftpm」，請確認已上傳正確檔案"
+          echo "❌ 找不到專案！請確認上傳的是「便當計數.swiftpm」或其壓縮檔"
           exit 1
         fi
 
