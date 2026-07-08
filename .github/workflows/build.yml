@@ -1,4 +1,4 @@
-name: 便當計數_打包IPA
+name: 便當計數_最終打包
 on:
   push:
     branches: [ main ]
@@ -6,42 +6,51 @@ on:
 
 jobs:
   build:
+    name: 編譯產生IPA
     runs-on: macos-15
     timeout-minutes: 20
 
     steps:
-    - uses: actions/checkout@v4
+    - name: 下載所有檔案
+      uses: actions/checkout@v4
 
-    - name: 生成專案設定
+    - name: 顯示目前檔案（除錯用）
+      run: ls -la
+
+    - name: 安裝編譯工具
+      run: |
+        brew install xcbeautify xcodegen
+        echo "✅ 工具安裝完成"
+
+    - name: 生成標準 Xcode 專案
       run: |
         cat > project.yml << 'YML'
 name: BentoCounter
 options:
-  bundleIdPrefix: com.chloe
+  bundleIdPrefix: com.chloe-biz
   deploymentTarget:
     iOS: "17.0"
   platform: iOS
+  usesTabs: false
 settings:
   base:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
 targets:
   BentoCounter:
     type: application
     platform: iOS
     sources:
-      - path: Sources/便當計數
-      - 便當計數App.swift
+      - ContentView.swift
+      - BentoCounterApp.swift
 YML
-
-    - name: 安裝工具與生成專案
-      run: |
-        brew install xcbeautify xcodegen
+        echo "✅ 專案設定生成完成"
         xcodegen generate
 
-    - name: 編譯與匯出IPA
+    - name: 編譯與匯出 IPA
       run: |
         xcodebuild archive \
           -project BentoCounter.xcodeproj \
@@ -51,14 +60,27 @@ YML
           -sdk iphoneos \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
           | xcbeautify
         
         xcodebuild -exportArchive \
           -archivePath App.xcarchive \
-          -exportOptionsPlist <(echo '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>method</key><string>ad-hoc</string><key>signingStyle</key><string>manual</string></dict></plist>') \
+          -exportOptionsPlist <(echo '<?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>') \
           -exportPath ./Output
+        echo "✅ IPA 產生成功"
 
-    - name: 上傳成品
+    - name: 上傳安裝檔
       uses: actions/upload-artifact@v4
       with:
         name: 便當計數_安裝檔
