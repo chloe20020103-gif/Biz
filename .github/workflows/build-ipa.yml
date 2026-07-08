@@ -1,0 +1,70 @@
+name: 便當計數_自動打包IPA
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 編譯產生IPA
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+    - name: 下載程式碼
+      uses: actions/checkout@v4
+
+    - name: 確認與整理專案
+      run: |
+        ls -la
+        # 將 Swift Playgrounds 匯出的專案轉為標準 Xcode 格式
+        if [ -d "便當計數.swiftpm" ]; then
+          mv 便當計數.swiftpm 便當計數.xcodeproj
+          echo "✅ 專案轉換完成"
+        else
+          echo "❌ 找不到「便當計數.swiftpm」，請確認已上傳正確檔案"
+          exit 1
+        fi
+
+    - name: 安裝編譯工具
+      run: brew install xcbeautify
+
+    - name: 編譯原生App
+      run: |
+        xcodebuild archive \
+          -project 便當計數.xcodeproj \
+          -scheme 便當計數 \
+          -configuration Release \
+          -archivePath App.xcarchive \
+          -sdk iphoneos \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          | xcbeautify
+
+    - name: 匯出安裝檔IPA
+      run: |
+        xcodebuild -exportArchive \
+          -archivePath App.xcarchive \
+          -exportOptionsPlist <(echo '<?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>ad-hoc</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <false/>
+          </dict>
+          </plist>') \
+          -exportPath ./Output
+
+    - name: 上傳成品IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: 便當計數_安裝檔
+        path: ./Output/*.ipa
+        retention-days: 90
